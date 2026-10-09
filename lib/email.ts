@@ -1,20 +1,51 @@
-// Sends email through Resend when a key is set; otherwise does nothing.
+// Sends email through whichever provider has a key set: Brevo, Resend or ZeptoMail.
+// If none is set, emails are skipped quietly so the rest of the app still works.
+type Provider = "brevo" | "resend" | "zepto" | null;
+
+function provider(): Provider {
+  if (process.env.BREVO_API_KEY) return "brevo";
+  if (process.env.RESEND_API_KEY) return "resend";
+  if (process.env.ZEPTOMAIL_TOKEN) return "zepto";
+  return null;
+}
+
 export function emailReady() {
-  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+  return Boolean(provider() && process.env.EMAIL_FROM);
+}
+
+function fromParts() {
+  const raw = process.env.EMAIL_FROM || "";
+  const m = raw.match(/^\s*(.*?)\s*<(.+)>\s*$/);
+  return m ? { name: m[1] || "Tender Finder", email: m[2] } : { name: "Tender Finder", email: raw.trim() };
 }
 
 export async function sendEmail(to: string, subject: string, html: string) {
-  if (!emailReady()) return { skipped: true };
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ from: process.env.EMAIL_FROM, to, subject, html }),
-  });
-  if (!res.ok) throw new Error(`Email failed: ${res.status} ${await res.text()}`);
-  return { sent: true };
+  const p = provider();
+  if (!p || !process.env.EMAIL_FROM) return { skipped: true };
+  const from = fromParts();
+
+  let url: string, headers: Record<string, string>, body: unknown;
+  if (p === "brevo") {
+    url = "https://api.brevo.com/v3/smtp/email";
+    headers = { "api-key": process.env.BREVO_API_KEY!, "Content-Type": "application/json", accept: "application/json" };
+    body = { sender: from, to: [{ email: to }], subject, htmlContent: html };
+  } else if (p === "resend") {
+    url = "https://api.resend.com/emails";
+    headers = { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" };
+    body = { from: process.env.EMAIL_FROM, to, subject, html };
+  } else {
+    url = "https://api.zeptomail.in/v1.1/email";
+    headers = { Authorization: process.env.ZEPTOMAIL_TOKEN!, "Content-Type": "application/json" };
+    body = {
+      from: { address: from.email, name: from.name },
+      to: [{ email_address: { address: to } }],
+      subject, htmlbody: html,
+    };
+  }
+
+  const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`Email failed (${p} ${res.status}): ${(await res.text()).slice(0, 200)}`);
+  return { sent: true, via: p };
 }
 
 export function esc(s: unknown) {
