@@ -10,13 +10,17 @@ import { fmtDate, rupees } from "@/lib/constants";
 import { aiReady, extractTenderList } from "@/lib/ai";
 import { fetchAsText, robotsAllows } from "@/lib/fetchSource";
 import { cleanDistrict, cleanState } from "@/lib/places";
+import { TEMPLATES, sendTemplate, templateLang, whatsappReady } from "@/lib/whatsapp";
 
 export const maxDuration = 60;
 
 type Source = { id: string; name: string; url: string; kind: string; state: string | null; district: string | null; robots_allowed: boolean | null };
 type Match = { user_id: string; email: string; business_name: string; tender_id: string; title: string; organisation: string | null; closing_at: string | null; value: number | null };
 type Reminder = { user_id: string; email: string; business_name: string; tender_id: string; title: string; closing_at: string; days_left: number; status: string };
-type Weekly = { user_id: string; email: string; business_name: string; new_matches: number; closing_soon: number };
+type Weekly = {
+  user_id: string; email: string; wa_phone: string | null; whatsapp_alerts: boolean;
+  business_name: string; language: string; new_matches: number; closing_soon: number;
+};
 
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
@@ -30,9 +34,9 @@ export async function GET(req: Request) {
   });
   const site = process.env.NEXT_PUBLIC_SITE_URL || "";
   const report = {
-    emailOn: emailReady(), aiOn: aiReady(),
+    emailOn: emailReady(), aiOn: aiReady(), whatsappOn: whatsappReady(),
     sourcesChecked: 0, sourcesSkipped: 0, tendersFound: 0, tendersAdded: 0,
-    newMatchEmails: 0, reminders: 0, weekly: 0, errors: [] as string[],
+    whatsappSent: 0, newMatchEmails: 0, reminders: 0, weekly: 0, errors: [] as string[],
   };
 
   // 1) Check the tender pages we follow — but only where the site's rules allow it
@@ -87,7 +91,46 @@ export async function GET(req: Request) {
     }
   }
 
-  // 2) New matches, one email per business
+  // 2) WhatsApp alerts — new matches and deadline reminders
+  if (report.whatsappOn) {
+    type WaRow = { kind: string; user_id: string; wa_phone: string; business_name: string; language: string; payload: Record<string, unknown> };
+    const { data: outbox, error: wErr } = await db.rpc("job_wa_outbox", { p_secret: secret });
+    if (wErr) report.errors.push(`whatsapp outbox: ${wErr.message}`);
+    for (const row of (outbox || []) as WaRow[]) {
+      try {
+        const lang = templateLang(row.language);
+        if (row.kind === "match") {
+          const list = (row.payload.tenders as { title: string; closing_at: string | null }[]) || [];
+          const count = Number(row.payload.count || list.length);
+          const first = list[0];
+          // Template body: {{1}} business, {{2}} how many, {{3}} the closest one
+          await sendTemplate(row.wa_phone, TEMPLATES.newMatches, lang, [
+            row.business_name,
+            String(count),
+            first ? `${first.title} (last date ${fmtDate(first.closing_at)})` : "see your dashboard",
+          ]);
+          await db.rpc("job_mark_notified", { p_secret: secret, p_user: row.user_id });
+        } else if (row.kind === "reminder") {
+          // Template body: {{1}} business, {{2}} tender, {{3}} days left, {{4}} last date
+          await sendTemplate(row.wa_phone, TEMPLATES.reminder, lang, [
+            row.business_name,
+            String(row.payload.title || ""),
+            String(row.payload.days_left || ""),
+            fmtDate(row.payload.closing_at as string),
+          ]);
+          await db.rpc("job_mark_reminded", {
+            p_secret: secret, p_user: row.user_id,
+            p_tender: row.payload.tender_id, p_days: row.payload.days_left,
+          });
+        }
+        report.whatsappSent++;
+      } catch (e) {
+        report.errors.push(`whatsapp ${row.kind}: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200));
+      }
+    }
+  }
+
+  // 3) The same alerts by email, for anyone without WhatsApp
   const { data: matches, error: mErr } = await db.rpc("job_new_matches", { p_secret: secret });
   if (mErr) report.errors.push(mErr.message);
   const byUser = new Map<string, Match[]>();
@@ -110,7 +153,7 @@ export async function GET(req: Request) {
     } catch (e) { report.errors.push(String(e)); }
   }
 
-  // 3) Deadline reminders
+  // 4) Deadline reminders by email
   const { data: due, error: rErr } = await db.rpc("job_due_reminders", { p_secret: secret });
   if (rErr) report.errors.push(rErr.message);
   for (const r of (due || []) as Reminder[]) {
@@ -127,13 +170,21 @@ export async function GET(req: Request) {
     } catch (e) { report.errors.push(String(e)); }
   }
 
-  // 4) Weekly report on Mondays (India time)
+  // 5) Weekly report on Mondays (India time), by WhatsApp and email
   const istDay = new Date(Date.now() + 5.5 * 3600000).getUTCDay();
-  if (istDay === 1 && report.emailOn) {
-    const { data: weekly } = await db.rpc("job_weekly_report", { p_secret: secret });
+  if (istDay === 1 && (report.emailOn || report.whatsappOn)) {
+    const { data: weekly } = await db.rpc("job_weekly_report_v2", { p_secret: secret });
     for (const w of (weekly || []) as Weekly[]) {
       try {
-        if (!w.email) continue;
+        if (report.whatsappOn && w.wa_phone && w.whatsapp_alerts) {
+          // Template body: {{1}} business, {{2}} new matches, {{3}} closing soon
+          await sendTemplate(w.wa_phone, TEMPLATES.weekly, templateLang(w.language), [
+            w.business_name, String(w.new_matches), String(w.closing_soon),
+          ]);
+          report.weekly++;
+          continue;
+        }
+        if (!report.emailOn || !w.email) continue;
         await sendEmail(w.email, `Your weekly tender report: ${w.new_matches} new matches`,
           emailShell(`This week for ${w.business_name}`,
             `<p><b>${w.new_matches}</b> new tenders matched your work in the last 7 days.</p>

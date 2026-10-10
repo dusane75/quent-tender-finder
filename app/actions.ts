@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
 import { DOCUMENTS } from "@/lib/constants";
+import { normalisePhone } from "@/lib/whatsapp";
 
 function list(v: FormDataEntryValue | null) {
   return String(v || "")
@@ -35,6 +36,8 @@ export async function saveProfile(form: FormData) {
     business_name: String(form.get("business_name") || "").trim().slice(0, 200),
     owner_name: String(form.get("owner_name") || "").trim().slice(0, 120) || null,
     phone: String(form.get("phone") || "").trim().slice(0, 20) || null,
+    wa_phone: normalisePhone(String(form.get("phone") || "")),
+    whatsapp_alerts: Boolean(form.get("whatsapp_alerts")),
     address: String(form.get("address") || "").trim().slice(0, 400) || null,
     states: states.length ? states : ["Maharashtra"],
     districts,

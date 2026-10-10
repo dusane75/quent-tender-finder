@@ -18,7 +18,11 @@ export default function ProfileForm({ p, back }: { p: P; back: "/onboarding" | "
         <div className="grid two">
           <div><label>Business name *</label><input type="text" name="business_name" required defaultValue={p?.business_name || ""} /></div>
           <div><label>Owner / contact person</label><input type="text" name="owner_name" defaultValue={p?.owner_name || ""} /></div>
-          <div><label>Mobile (for WhatsApp alerts later)</label><input type="tel" name="phone" defaultValue={p?.phone || ""} placeholder="98xxxxxxxx" /></div>
+          <div>
+            <label>WhatsApp number *</label>
+            <input type="tel" name="phone" required defaultValue={p?.phone || ""} placeholder="98xxxxxxxx" />
+            <p className="hint">This is where your tender alerts go. Indian numbers only — no need to type +91.</p>
+          </div>
           <div>
             <label>Type of business</label>
             <select name="business_type" defaultValue={p?.business_type || ""}>
@@ -89,7 +93,11 @@ export default function ProfileForm({ p, back }: { p: P; back: "/onboarding" | "
       </div>
 
       <div className="card stack">
-        <label className="inline"><input type="checkbox" name="email_alerts" defaultChecked={p ? p.email_alerts : true} /> Email me new matching tenders, deadline reminders (7, 3 and 1 day before) and a weekly report.</label>
+        <label className="inline">
+          <input type="checkbox" name="whatsapp_alerts" defaultChecked={p ? p.whatsapp_alerts : true} />
+          <span>Send me new matching tenders, deadline reminders (7, 3 and 1 day before) and a weekly report <b>on WhatsApp</b>. You can also message us any time to ask about your tenders, or reply STOP to switch alerts off.</span>
+        </label>
+        <label className="inline"><input type="checkbox" name="email_alerts" defaultChecked={p ? p.email_alerts : false} /> Send the same alerts by email as well.</label>
         <label className="inline">
           <input type="checkbox" name="consent" required defaultChecked={Boolean(p)} />
           <span>I agree that my business details are stored securely and used only to find tenders, check eligibility and prepare my bid papers, as explained in the <a href="/privacy" target="_blank">privacy notice</a>. I can delete them any time.</span>

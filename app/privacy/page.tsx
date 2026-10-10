@@ -13,9 +13,9 @@ export default function Privacy() {
         <h3>Why we use it</h3>
         <p>Only to find tenders that match you, explain them, check your eligibility, prepare your bid papers and send the alerts and reminders you asked for. We do not sell your data or use it for advertising.</p>
         <h3>Who processes it</h3>
-        <p>Your data is stored with Supabase (database) and the app runs on Vercel. Tender text and the relevant profile details are sent to Google’s Gemini AI service to write summaries and bid papers. Emails are sent through an email delivery service.</p>
+        <p>Your data is stored with Supabase (database) and the app runs on Vercel. Tender text and the relevant profile details are sent to Google’s Gemini AI service to write summaries and bid papers. Alerts are sent on WhatsApp through Meta’s WhatsApp Business service, so your number and the message content pass through Meta. If you message us on WhatsApp, your message is read by the AI to write a reply.</p>
         <h3>Your rights</h3>
-        <p>You can see and change your details in Settings, download all your data, turn off alerts, or delete your account and data at any time. You can withdraw consent by deleting your account.</p>
+        <p>You can see and change your details in Settings, download all your data, turn off alerts, or delete your account and data at any time. You can also switch off WhatsApp alerts by replying STOP to any message. You can withdraw consent by deleting your account.</p>
         <h3>What we never do</h3>
         <p>We never submit bids or sign anything for you, never ask for your digital signature, passwords or portal logins, and only use public tender information.</p>
         <h3>Contact / grievance</h3>
