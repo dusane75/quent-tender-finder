@@ -5,9 +5,9 @@ import { APP_NAME } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
-  title: `${APP_NAME} — Government tenders for Maharashtra businesses`,
+  title: `${APP_NAME} — Government tenders for Indian businesses`,
   description:
-    "Find government tenders that match your work, understand them in Marathi, Hindi or English, check eligibility and prepare your bid documents.",
+    "Get government tenders that match your work on WhatsApp, in Marathi, Hindi or English. Check eligibility and prepare your bid papers. You always submit your own bid.",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
